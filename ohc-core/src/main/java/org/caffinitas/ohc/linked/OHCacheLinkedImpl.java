@@ -65,6 +65,10 @@ public final class OHCacheLinkedImpl<K, V> implements OHCache<K, V>
     private final long maxEntrySize;
     private final long defaultTTL;
 
+    private final boolean blockAlloc;
+    private final int blockAllocInitial;
+    private final int blockAllocIncrement;
+
     private long capacity;
 
     private volatile long putFailCount;
@@ -88,6 +92,20 @@ public final class OHCacheLinkedImpl<K, V> implements OHCache<K, V>
 
         this.throwOOME = builder.isThrowOOME();
         this.hasher = Hasher.create(builder.getHashAlgorighm());
+
+        // block allocation
+        this.blockAllocInitial = builder.getBlockAllocInitial();
+        this.blockAllocIncrement = builder.getBlockAllocIncrement();
+        if (blockAllocInitial > 0 || blockAllocIncrement > 0)
+        {
+            if (blockAllocInitial <= 0)
+                throw new IllegalArgumentException("blockAllocInitial must be greater than 0 when using block key/value allocation");
+            if (blockAllocIncrement <= 0)
+                throw new IllegalArgumentException("blockAllocIncrement must be greater than 0 when using block key/value allocation");
+            blockAlloc = true;
+        }
+        else
+            blockAlloc = false;
 
         // build segments
         int segments = builder.getSegmentCount();

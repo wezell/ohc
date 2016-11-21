@@ -116,6 +116,24 @@ import org.caffinitas.ohc.linked.OHCacheLinkedImpl;
  *         <td>The amount of time in milliseconds for each timeouts-slot.</td>
  *         <td>{@code 128}</td>
  *     </tr>
+ *     <tr>
+ *         <td>{@code blockAllocIncrement}</td>
+ *         <td>Allows {@link CacheSerializer} implementations to skip the {@link CacheSerializer#serializedSize(Object)}
+ *         step. If the {@code serializedSize} method returns {@code -1}, a dynamically increasing {@code ByteBuffer} will
+ *         be used. Accesses outside the allocated range in that {@code ByteBuffer} will cause the backing memory
+ *         to be reallocated.
+ *         This value defines the allocation increment. (linked implementation only)</td>
+ *         <td>{@code 0}</td>
+ *     </tr>
+ *     <tr>
+ *         <td>{@code blockAllocInitial}</td>
+ *         <td>Allows {@link CacheSerializer} implementations to skip the {@link CacheSerializer#serializedSize(Object)}
+ *         step. If the {@code serializedSize} method returns {@code -1}, a dynamically increasing {@code ByteBuffer} will
+ *         be used. Accesses outside the allocated range in that {@code ByteBuffer} will cause the backing memory
+ *         to be reallocated.
+ *         This value defines the initial allocation size. (linked implementation only)</td>
+ *         <td>{@code 0}</td>
+ *     </tr>
  * </table>
  * <p>
  *     You may also use system properties prefixed with {@code org.caffinitas.org.} to other defaults.
@@ -144,6 +162,8 @@ public class OHCacheBuilder<K, V>
     private long defaultTTLmillis;
     private int timeoutsSlots;
     private int timeoutsPrecision;
+    private int blockAllocInitial;
+    private int blockAllocIncrement;
 
     private OHCacheBuilder()
     {
@@ -164,6 +184,8 @@ public class OHCacheBuilder<K, V>
         defaultTTLmillis = fromSystemProperties("defaultTTLmillis", defaultTTLmillis);
         timeoutsSlots = fromSystemProperties("timeoutsSlots", timeoutsSlots);
         timeoutsPrecision = fromSystemProperties("timeoutsPrecision", timeoutsPrecision);
+        blockAllocInitial = fromSystemProperties("blockAllocInitial", blockAllocInitial);
+        blockAllocIncrement = fromSystemProperties("blockAllocIncrement", blockAllocIncrement);
     }
 
     public static final String SYSTEM_PROPERTY_PREFIX = "org.caffinitas.ohc.";
@@ -436,6 +458,28 @@ public class OHCacheBuilder<K, V>
     public OHCacheBuilder<K, V> timeoutsPrecision(int timeoutsPrecision)
     {
         this.timeoutsPrecision = timeoutsPrecision;
+        return this;
+    }
+
+    public int getBlockAllocInitial()
+    {
+        return blockAllocInitial;
+    }
+
+    public int getBlockAllocIncrement()
+    {
+        return blockAllocIncrement;
+    }
+
+    public OHCacheBuilder<K, V> blockAlloc(int blockAllocInitial, int blockAllocIncrement)
+    {
+        if (blockAllocIncrement < 0 || blockAllocInitial < 0)
+            throw new IllegalArgumentException("negative values not allowed");
+        if ((blockAllocInitial == 0 && blockAllocIncrement > 0) ||
+            (blockAllocInitial > 0 && blockAllocIncrement == 0))
+            throw new IllegalArgumentException("initial and increment must be either both 0 to disable block-allocation or both positive");
+        this.blockAllocInitial = blockAllocInitial;
+        this.blockAllocIncrement = blockAllocIncrement;
         return this;
     }
 }

@@ -48,6 +48,15 @@ public interface CacheSerializer<T>
     /**
      * Calculate the number of bytes that will be produced by {@link #serialize(Object, java.nio.ByteBuffer)}
      * for given object {@code t}.
+     * <p>
+     * If the returned serialized size is greater than {@code 0}, it indicates the exact serialized size of the
+     * given object.
+     * </p>
+     * <p>
+     * If the returned serialized size is less than {@code 0} <em>and</em> block-allocation is enabled on the cache
+     * instance (see {@link OHCacheBuilder#blockAlloc(int, int) OHCacheBuilder.blockAlloc(int,int)}), the
+     * implementation will allocate memory according to these parameter and eventually re-allocate that memory.
+     * </p>
      *
      * @param value non-{@code null} object to calculate serialized size for
      * @return serialized size of {@code t}
