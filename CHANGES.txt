@@ -1,10 +1,17 @@
 0.6.0
 =====
 
-*** BREAKING CHANGE ***
-If entry TTLs are used, it is required to configure the cache with OHCacheBuilder.timeouts(true)
+BREAKING CHANGES
+----------------
+
+- If entry TTLs are used, it is required to configure the cache with OHCacheBuilder.timeouts(true)
+- Signatures of OHCache.put() and OHCache.remove() methods has been changed to return a boolean value.
+  This means that this version of OHC requires a recompilation of code that uses OHC and cannot be
+  used as a drop-in replacement (i.e. just replace a jar).
 
 
+#37 non-evicting mode
+#34 add WTinyLFU
 - add new builder cache flag 'timeouts'
 - add Ticker interface
 - unit test fixes for systems with few CPUs

@@ -15,31 +15,19 @@
  */
 package org.caffinitas.ohc.linked;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 final class KeyBuffer
 {
-    private final byte[] array;
+    final byte[] buffer;
+    private final int size;
     private long hash;
 
-    // TODO maybe move 'array' to off-heap - depends on actual use.
-    // pro: reduces heap pressure
-    // pro: harmonize code for key + value (de)serialization in DataIn/Output implementations
-    // con: puts pressure on jemalloc
-
-    KeyBuffer(byte[] bytes)
+    KeyBuffer(int size)
     {
-        array = bytes;
-    }
-
-    byte[] array()
-    {
-        return array;
-    }
-
-    int size()
-    {
-        return array.length;
+        buffer = new byte[size];
+        this.size = size;
     }
 
     long hash()
@@ -49,7 +37,7 @@ final class KeyBuffer
 
     KeyBuffer finish(Hasher hasher)
     {
-        hash = hasher.hash(array);
+        hash = hasher.hash(buffer);
 
         return this;
     }
@@ -61,7 +49,7 @@ final class KeyBuffer
 
         KeyBuffer keyBuffer = (KeyBuffer) o;
 
-        return Arrays.equals(array, keyBuffer.array);
+        return size == keyBuffer.size && Arrays.equals(keyBuffer.buffer, buffer);
     }
 
     public int hashCode()
@@ -69,10 +57,10 @@ final class KeyBuffer
         return (int) hash;
     }
 
-    static String padToEight(int val)
+    private static String pad(int val)
     {
-        String str = Integer.toBinaryString(val & 0xff);
-        while (str.length() < 8)
+        String str = Integer.toHexString(val & 0xff);
+        while (str.length() == 1)
             str = '0' + str;
         return str;
     }
@@ -80,12 +68,47 @@ final class KeyBuffer
     @Override
     public String toString()
     {
-        StringBuilder sb = new StringBuilder();
-        for (int ii = 0; ii < array.length; ii++) {
+        StringBuilder sb = new StringBuilder(size * 3);
+        for (int ii = 0; ii < size; ii++) {
             if (ii % 8 == 0 && ii != 0) sb.append('\n');
-            sb.append(padToEight(array[ii]));
+            sb.append(pad(buffer[ii]));
             sb.append(' ');
         }
         return sb.toString();
+    }
+
+    ByteBuffer byteBuffer()
+    {
+        return ByteBuffer.wrap(buffer);
+    }
+
+    boolean sameKey(long hashEntryAdr)
+    {
+        if (HashEntries.getHash(hashEntryAdr) != hash())
+            return false;
+
+        long serKeyLen = HashEntries.getKeyLen(hashEntryAdr);
+        return serKeyLen == size && compareKey(hashEntryAdr);
+    }
+
+    private boolean compareKey(long hashEntryAdr)
+    {
+        int blkOff = (int) Util.ENTRY_OFF_DATA;
+        int p = 0;
+        int endIdx = buffer.length - 1;
+        for (; p <= endIdx - 8; p += 8, blkOff += 8)
+            if (Uns.getLong(hashEntryAdr, blkOff) != Uns.getLongFromByteArray(buffer, p))
+                return false;
+        for (; p <= endIdx - 4; p += 4, blkOff += 4)
+            if (Uns.getInt(hashEntryAdr, blkOff) != Uns.getIntFromByteArray(buffer, p))
+                return false;
+        for (; p <= endIdx - 2; p += 2, blkOff += 2)
+            if (Uns.getShort(hashEntryAdr, blkOff) != Uns.getShortFromByteArray(buffer, p))
+                return false;
+        for (; p < endIdx; p++, blkOff++)
+            if (Uns.getByte(hashEntryAdr, blkOff) != buffer[p])
+                return false;
+
+        return true;
     }
 }
