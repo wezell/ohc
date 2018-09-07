@@ -13,31 +13,17 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-package org.caffinitas.ohc.alloc;
+package org.caffinitas.ohc.linked;
 
-import com.sun.jna.Native;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public final class JNANativeAllocator implements IAllocator
+final class Crc32cHash extends Crc32Hash
 {
-    public long allocate(long size)
-    {
-        try
-        {
-            return Native.malloc(size);
-        }
-        catch (OutOfMemoryError oom)
-        {
-            return 0L;
-        }
-    }
+    private static final Logger LOGGER = LoggerFactory.getLogger(Hasher.class);
 
-    public void free(long peer)
+    Crc32cHash()
     {
-        Native.free(peer);
-    }
-
-    public long getTotalAllocated()
-    {
-        return -1L;
+        LOGGER.warn("CRC32C hash is only available with Java 11 or newer. Falling back to CRC32.");
     }
 }

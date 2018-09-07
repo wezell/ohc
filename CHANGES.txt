@@ -1,14 +1,50 @@
+0.7.0
+=====
+
+- introduced experimental support for Java 11
+  - ohc-core.jar is now built as a multi-release jar
+  - hasher implementation for CRC32C, falls back to CRC32 before Java 11
+#53 Fix calculation of 'slots' in Timeouts
+#59 Fix initialization of 'precision' in Timeout
+#61 fix double counting in Timeouts.removeExpired()
+- upgrade a bunch of dependencies
+  - Guave to version 19.0
+  - SLF4J to 1.7.25
+  - snappy to 1.1.7.2
+  - jna to 4.5.2
+- removed support for Java 7, therefore the artifact ohc-core-j8 is no longer necessary
+
+
+0.6.1
+=====
+
+- update maven plugin versions
+- update jmh version
+#34 add WTinyLFU
+#37 non-evicting mode
+- unit test fixes for systems with few CPUs
+- unit test fix regarding charset
+
 0.6.0
 =====
 
-*** BREAKING CHANGE ***
-If entry TTLs are used, it is required to configure the cache with OHCacheBuilder.timeouts(true)
+BREAKING CHANGES
+----------------
 
+- If entry TTLs are used, it is required to configure the cache with OHCacheBuilder.timeouts(true)
+- Signatures of OHCache.put() and OHCache.remove() methods has been changed to return a boolean value.
+  This means that this version of OHC requires a recompilation of code that uses OHC and cannot be
+  used as a drop-in replacement (i.e. just replace a jar).
 
+non-breaking changes
+--------------------
+
+(#37 non-evicting mode) - not merged by accident
+(#34 add WTinyLFU) - not merged by accident
 - add new builder cache flag 'timeouts'
 - add Ticker interface
-- unit test fixes for systems with few CPUs
-- unit test fix regarding charset
+(- unit test fixes for systems with few CPUs) - not merged by accident
+(- unit test fix regarding charset) - not merged by accident
 - update to guava 18.0
 #33 crc32 algorithm does not work on Java7
 

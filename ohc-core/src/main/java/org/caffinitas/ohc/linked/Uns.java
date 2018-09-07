@@ -21,11 +21,9 @@ import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Map;
-import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import com.google.common.primitives.Ints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.caffinitas.ohc.OHCacheBuilder;
@@ -48,8 +46,8 @@ final class Uns
     //
     // #ifdef __DEBUG_OFF_HEAP_MEMORY_ACCESS
     //
-    private static final ConcurrentMap<Long, AllocInfo> ohDebug = __DEBUG_OFF_HEAP_MEMORY_ACCESS ? new ConcurrentHashMap<Long, AllocInfo>(16384) : null;
-    private static final Map<Long, Throwable> ohFreeDebug = __DEBUG_OFF_HEAP_MEMORY_ACCESS ? new ConcurrentHashMap<Long, Throwable>(16384) : null;
+    private static final ConcurrentMap<Long, AllocInfo> ohDebug = __DEBUG_OFF_HEAP_MEMORY_ACCESS ? new ConcurrentHashMap<>(16384) : null;
+    private static final Map<Long, Throwable> ohFreeDebug = __DEBUG_OFF_HEAP_MEMORY_ACCESS ? new ConcurrentHashMap<>(16384) : null;
 
     private static final class AllocInfo
     {
@@ -112,7 +110,7 @@ final class Uns
         }
     }
 
-    private static void validate(long address, long offset, long len)
+    static void validate(long address, long offset, long len)
     {
         if (__DEBUG_OFF_HEAP_MEMORY_ACCESS)
         {
@@ -136,8 +134,6 @@ final class Uns
     // #endif
     //
 
-    private static final UnsExt ext;
-
     static
     {
         try
@@ -147,34 +143,6 @@ final class Uns
             unsafe = (Unsafe) field.get(null);
             if (unsafe.addressSize() > 8)
                 throw new RuntimeException("Address size " + unsafe.addressSize() + " not supported yet (max 8 bytes)");
-
-            String javaVersion = System.getProperty("java.version");
-            if (javaVersion.indexOf('-') != -1)
-                javaVersion = javaVersion.substring(0, javaVersion.indexOf('-'));
-            StringTokenizer st = new StringTokenizer(javaVersion, ".");
-            int major = Integer.parseInt(st.nextToken());
-            int minor = st.hasMoreTokens() ? Integer.parseInt(st.nextToken()) : 0;
-            UnsExt e;
-            if (major > 1 || minor >= 8)
-                try
-                {
-                    // use new Java8 methods in sun.misc.Unsafe
-                    Class<? extends UnsExt> cls = (Class<? extends UnsExt>) Class.forName(UnsExt7.class.getName().replace('7', '8'));
-                    e = cls.getDeclaredConstructor(Unsafe.class).newInstance(unsafe);
-                    LOGGER.info("OHC using Java8 Unsafe API");
-                }
-                catch (VirtualMachineError ex)
-                {
-                    throw ex;
-                }
-                catch (Throwable ex)
-                {
-                    LOGGER.warn("Failed to load Java8 implementation ohc-core-j8 : " + ex);
-                    e = new UnsExt7(unsafe);
-                }
-            else
-                e = new UnsExt7(unsafe);
-            ext = e;
 
             if (__DEBUG_OFF_HEAP_MEMORY_ACCESS)
                 LOGGER.warn("Degraded performance due to off-heap memory allocations and access guarded by debug code enabled via system property " + OHCacheBuilder.SYSTEM_PROPERTY_PREFIX + "debugOffHeapAccess=true");
@@ -230,7 +198,7 @@ final class Uns
     {
         validate(address, offset, 8L);
 
-        return ext.getAndPutLong(address, offset, value);
+        return unsafe.getAndSetLong(null, address + offset, value);
     }
 
     static void putLong(long address, long offset, long value)
@@ -283,15 +251,15 @@ final class Uns
 
     static boolean decrement(long address, long offset)
     {
-        validate(address, offset, 8L);
-        long v = ext.getAndAddInt(address, offset, -1);
+        validate(address, offset, 4L);
+        long v = unsafe.getAndAddInt(null, address + offset, -1);
         return v == 1;
     }
 
     static void increment(long address, long offset)
     {
-        validate(address, offset, 8L);
-        ext.getAndAddInt(address, offset, 1);
+        validate(address, offset, 4L);
+        unsafe.getAndAddInt(null, address + offset, 1);
     }
 
     static void copyMemory(byte[] arr, int off, long address, long offset, long len)
@@ -319,10 +287,31 @@ final class Uns
         unsafe.setMemory(address + offset, len, val);
     }
 
-    static long crc32(long address, long offset, long len)
+    static boolean memoryCompare(long adr1, long off1, long adr2, long off2, long len)
     {
-        validate(address, offset, len);
-        return ext.crc32(address, offset, len);
+        if (adr1 == 0L)
+            return false;
+
+        if (adr1 == adr2)
+        {
+            assert off1 == off2;
+            return true;
+        }
+
+        for (; len >= 8; len -= 8, off1 += 8, off2 += 8)
+            if (Uns.getLong(adr1, off1) != Uns.getLong(adr2, off2))
+                return false;
+        for (; len >= 4; len -= 4, off1 += 4, off2 += 4)
+            if (Uns.getInt(adr1, off1) != Uns.getInt(adr2, off2))
+                return false;
+        for (; len >= 2; len -= 2, off1 += 2, off2 += 2)
+            if (Uns.getShort(adr1, off1) != Uns.getShort(adr2, off2))
+                return false;
+        for (; len > 0; len--, off1++, off2++)
+            if (Uns.getByte(adr1, off1) != Uns.getByte(adr2, off2))
+                return false;
+
+        return true;
     }
 
     static long getTotalAllocated()
@@ -415,14 +404,18 @@ final class Uns
         }
     }
 
-    static ByteBuffer keyBufferR(long hashEntryAdr, long keyLen)
+    static void invalidateDirectBuffer(ByteBuffer buffer)
     {
-        return Uns.directBufferFor(hashEntryAdr + Util.ENTRY_OFF_DATA, 0, keyLen, true);
+        buffer.position(0);
+        unsafe.putInt(buffer, DIRECT_BYTE_BUFFER_CAPACITY_OFFSET, 0);
+        unsafe.putInt(buffer, DIRECT_BYTE_BUFFER_LIMIT_OFFSET, 0);
+        unsafe.putLong(buffer, DIRECT_BYTE_BUFFER_ADDRESS_OFFSET, 0L);
     }
 
     static ByteBuffer keyBufferR(long hashEntryAdr)
     {
-        return keyBufferR(hashEntryAdr, HashEntries.getKeyLen(hashEntryAdr));
+        long keyLen = HashEntries.getKeyLen(hashEntryAdr);
+        return Uns.directBufferFor(hashEntryAdr + Util.ENTRY_OFF_DATA, 0, keyLen, true);
     }
 
     static ByteBuffer keyBuffer(long hashEntryAdr, long keyLen)
@@ -430,14 +423,10 @@ final class Uns
         return Uns.directBufferFor(hashEntryAdr + Util.ENTRY_OFF_DATA, 0, keyLen, false);
     }
 
-    static ByteBuffer valueBufferR(long hashEntryAdr, long valueLen)
-    {
-        return Uns.directBufferFor(hashEntryAdr + Util.ENTRY_OFF_DATA + Util.roundUpTo8(HashEntries.getKeyLen(hashEntryAdr)), 0, valueLen, true);
-    }
-
     static ByteBuffer valueBufferR(long hashEntryAdr)
     {
-        return valueBufferR(hashEntryAdr, HashEntries.getValueLen(hashEntryAdr));
+        long valueLen = HashEntries.getValueLen(hashEntryAdr);
+        return Uns.directBufferFor(hashEntryAdr + Util.ENTRY_OFF_DATA + Util.roundUpTo8(HashEntries.getKeyLen(hashEntryAdr)), 0, valueLen, true);
     }
 
     static ByteBuffer valueBuffer(long hashEntryAdr, long keyLen, long valueLen)

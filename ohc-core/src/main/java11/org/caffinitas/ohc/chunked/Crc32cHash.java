@@ -13,31 +13,17 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-package org.caffinitas.ohc.alloc;
+package org.caffinitas.ohc.chunked;
 
-import com.sun.jna.Native;
+import java.nio.ByteBuffer;
+import java.util.zip.CRC32C;
 
-public final class JNANativeAllocator implements IAllocator
+class Crc32cHash extends Hasher
 {
-    public long allocate(long size)
+    long hash(ByteBuffer buffer)
     {
-        try
-        {
-            return Native.malloc(size);
-        }
-        catch (OutOfMemoryError oom)
-        {
-            return 0L;
-        }
-    }
-
-    public void free(long peer)
-    {
-        Native.free(peer);
-    }
-
-    public long getTotalAllocated()
-    {
-        return -1L;
+        CRC32C crc = new CRC32C();
+        crc.update(buffer);
+        return crc.getValue();
     }
 }

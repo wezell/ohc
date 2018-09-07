@@ -21,5 +21,7 @@ public enum HashAlgorithm
 
     CRC32,
 
+    CRC32C,
+
     XX
 }
